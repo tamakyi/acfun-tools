@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>ACFun礼物数据分析工具</title>
+    <title>AcFun礼物数据分析工具</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -144,6 +144,28 @@
             text-align: center;
             width: 100%;
         }
+        .filter-controls {
+            margin: 15px 0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .filter-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+        .filter-box input {
+            width: 120px;
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .export-btn {
+            background: #6c757d !important;
+            margin-left: 10px;
+        }
         @keyframes loading {
             0%, 100% { opacity: 0.2; }
             50% { opacity: 1; }
@@ -170,7 +192,7 @@
             <br>本站不存储用户的任何信息，请注意保护个人隐私，不要把包括但不限于账号密码、手机号、网页Cookie等信息公布在任何不可信任的网站。
         </div>
 
-        <textarea id="inputArea" placeholder="在这里粘贴包含花括号在内的所有内容..."></textarea>
+        <textarea id="inputArea" placeholder="在这里粘贴API输出包括花括号在内的所有内容..."></textarea>
         
         <div class="time-filter">
             <div>
@@ -203,6 +225,16 @@
             sent: 'https://m.acfun.cn/rest/apph5-direct/pay/reward/giveRecords'
         };
 
+        let appState = {
+            original: { summary: [], detail: [] },
+            filtered: { summary: [], detail: [] },
+            sortState: {
+                summary: { field: null, asc: false },
+                detail: { field: null, asc: false }
+            },
+            filterValue: { summary: 0, detail: 0 }
+        };
+
         async function fetchData(type) {
             const btn = document.getElementById(type === 'received' ? 'receiveBtn' : 'sendBtn');
             const originalText = btn.textContent;
@@ -216,9 +248,8 @@
                     headers: {
                       'Referer': 'https://m.acfun.cn',
                       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    },
-                    origin: true
-                  });
+                    }
+                });
                 if (response.status === 401) throw new Error('401，因为网页获取不到AcFun的cookie，目前无解');
                 if (!response.ok) throw new Error(`请求失败: ${response.status}`);
                 
@@ -246,6 +277,15 @@
             
             errorDiv.textContent = '';
             resultContainer.innerHTML = '';
+            appState = {
+                original: { summary: [], detail: [] },
+                filtered: { summary: [], detail: [] },
+                sortState: {
+                    summary: { field: null, asc: false },
+                    detail: { field: null, asc: false }
+                },
+                filterValue: { summary: 0, detail: 0 }
+            };
 
             try {
                 if (!input.trim()) throw new Error('请输入或加载JSON数据');
@@ -274,92 +314,233 @@
                     return;
                 }
 
-                // 汇总表格
-                const summaryTable = document.createElement('table');
-                summaryTable.className = 'summary-table';
-                summaryTable.innerHTML = `
-                    <caption>用户汇总统计</caption>
-                    <tr>
-                        <th>UID</th>
-                        <th>用户名</th>
-                        <th>总礼物数</th>
-                        <th>总钻石数</th>
-                        <th>打赏金额（元）</th>
-                    </tr>
-                `;
-
-                const userStats = {};
-                filtered.forEach(record => {
-                    const uid = record.userId;
-                    const diamondAmount = record.azuanAmount || record.acoin;
-                    
-                    if (!userStats[uid]) {
-                        userStats[uid] = {
-                            name: record.userName || '匿名用户',
-                            totalGifts: 0,
-                            totalAzuan: 0
-                        };
-                    }
-                    userStats[uid].totalGifts += record.giftCount;
-                    userStats[uid].totalAzuan += diamondAmount;
-                });
-
-                Object.entries(userStats).forEach(([uid, stat]) => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${uid}</td>
-                        <td>${stat.name}</td>
-                        <td>${stat.totalGifts.toLocaleString()}</td>
-                        <td>${stat.totalAzuan.toLocaleString()}</td>
-                        <td>${(stat.totalAzuan / 0.8 / 1000).toFixed(2)}</td>
-                    `;
-                    summaryTable.appendChild(row);
-                });
-
-                resultContainer.appendChild(summaryTable);
-
-                // 明细表格
-                const detailTitle = document.createElement('div');
-                detailTitle.className = 'detail-caption';
-                detailTitle.textContent = '明细数据';
-                resultContainer.appendChild(detailTitle);
-
-                const detailTable = document.createElement('table');
-                detailTable.innerHTML = `
-                    <tr>
-                        <th>UID</th>
-                        <th>用户名</th>
-                        <th>礼物名称</th>
-                        <th>数量</th>
-                        <th>时间</th>
-                        <th>钻石数</th>
-                        <th>打赏金额（元）</th>
-                    </tr>
-                `;
-
-                filtered.forEach(record => {
-                    const date = new Date(record.createTime);
-                    const diamondAmount = record.azuanAmount || record.acoin;
-                    
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${record.userId}</td>
-                        <td>${record.userName || '匿名用户'}</td>
-                        <td>${record.giftName}</td>
-                        <td>${record.giftCount}</td>
-                        <td>${date.toLocaleString('zh-CN')}</td>
-                        <td>${diamondAmount.toLocaleString()}</td>
-                        <td>${(diamondAmount / 0.8 / 1000).toFixed(2)}</td>
-                    `;
-                    detailTable.appendChild(row);
-                });
-
-                resultContainer.appendChild(detailTable);
+                initOriginalData(filtered);
+                applyFilter('summary');
+                applyFilter('detail');
 
             } catch (error) {
                 errorDiv.textContent = `处理失败: ${error.message}`;
                 console.error('处理错误:', error);
             }
+        }
+
+        function initOriginalData(data) {
+            const userStats = {};
+            data.forEach(record => {
+                const uid = record.userId;
+                const diamondAmount = record.azuanAmount || record.acoin;
+                
+                if (!userStats[uid]) {
+                    userStats[uid] = {
+                        name: record.userName || '匿名用户',
+                        totalGifts: 0,
+                        totalAzuan: 0
+                    };
+                }
+                userStats[uid].totalGifts += record.giftCount;
+                userStats[uid].totalAzuan += diamondAmount;
+            });
+
+            appState.original.summary = Object.entries(userStats).map(([uid, stat]) => {
+                const row = document.createElement('tr');
+                row.dataset.totalValue = stat.totalAzuan / 1000;
+                row.innerHTML = `
+                    <td>${uid}</td>
+                    <td>${stat.name}</td>
+                    <td>${stat.totalGifts.toLocaleString()}</td>
+                    <td>${stat.totalAzuan.toLocaleString()}</td>
+                    <td>${(stat.totalAzuan / 1000).toFixed(2)}</td>
+                `;
+                return row;
+            });
+
+            appState.original.detail = data.map(record => {
+                const row = document.createElement('tr');
+                const diamondAmount = record.azuanAmount || record.acoin;
+                row.dataset.singleValue = diamondAmount / 1000;
+                row.innerHTML = `
+                    <td>${record.userId}</td>
+                    <td>${record.userName || '匿名用户'}</td>
+                    <td>${record.giftName}</td>
+                    <td>${record.giftCount}</td>
+                    <td>${new Date(record.createTime).toLocaleString('zh-CN')}</td>
+                    <td>${diamondAmount.toLocaleString()}</td>
+                    <td>${(diamondAmount / 1000).toFixed(2)}</td>
+                `;
+                return row;
+            });
+
+            createTableTemplates();
+        }
+
+        function createTableTemplates() {
+            const resultContainer = document.getElementById('resultContainer');
+            
+            // 汇总表格
+            const summaryTable = document.createElement('table');
+            summaryTable.className = 'summary-table';
+            summaryTable.innerHTML = `
+                <caption>
+                    用户汇总统计
+                    <div class="filter-controls">
+                        <button class="api-btn" onclick="handleSort('summary', 'total')">▼ 按打赏金额排序</button>
+                        <div class="filter-box">
+                            <span>最低打赏金额:</span>
+                            <input type="number" id="summaryMinValue" min="0" step="0.1">
+                            <button class="api-btn" onclick="applyFilter('summary')">筛选</button>
+                            <button class="api-btn export-btn" onclick="exportCSV('summary')">导出汇总CSV</button>
+                        </div>
+                    </div>
+                </caption>
+                <thead>
+                    <tr>
+                        <th>UID</th>
+                        <th>用户名</th>
+                        <th>总礼物数</th>
+                        <th>总钻石数</th>
+                        <th>总打赏金额</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            resultContainer.appendChild(summaryTable);
+
+            // 明细表格
+            const detailSection = document.createElement('div');
+            detailSection.innerHTML = `
+                <div class="detail-caption">
+                    明细数据
+                    <div class="filter-controls">
+                        <button class="api-btn" onclick="handleSort('detail', 'single')">▼ 按单次打赏金额排序</button>
+                        <div class="filter-box">
+                            <span>最低打赏金额:</span>
+                            <input type="number" id="detailMinValue" min="0" step="0.1">
+                            <button class="api-btn" onclick="applyFilter('detail')">筛选</button>
+                            <button class="api-btn export-btn" onclick="exportCSV('detail')">导出明细CSV</button>
+                        </div>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>UID</th>
+                            <th>用户名</th>
+                            <th>礼物名称</th>
+                            <th>数量</th>
+                            <th>时间</th>
+                            <th>钻石数</th>
+                            <th>打赏金额</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            `;
+            resultContainer.appendChild(detailSection);
+        }
+
+        function handleSort(tableType, field) {
+            const state = appState.sortState[tableType];
+            
+            if (state.field === field) {
+                state.asc = !state.asc;
+            } else {
+                state.field = field;
+                state.asc = false;
+            }
+
+            appState.filtered[tableType].sort((a, b) => {
+                const aVal = parseFloat(a.dataset[`${field}Value`]);
+                const bVal = parseFloat(b.dataset[`${field}Value`]);
+                return state.asc ? aVal - bVal : bVal - aVal;
+            });
+
+            renderTable(tableType);
+            updateSortButton(tableType, field, state.asc);
+        }
+
+        function applyFilter(tableType) {
+            const minValue = parseFloat(
+                document.getElementById(`${tableType}MinValue`).value
+            ) || 0;
+            
+            appState.filterValue[tableType] = minValue;
+            
+            appState.filtered[tableType] = appState.original[tableType].filter(row => {
+                const value = tableType === 'summary' ? 
+                    parseFloat(row.dataset.totalValue) :
+                    parseFloat(row.dataset.singleValue);
+                return value >= minValue;
+            });
+
+            if (appState.sortState[tableType].field) {
+                handleSort(tableType, appState.sortState[tableType].field);
+            } else {
+                renderTable(tableType);
+            }
+        }
+
+        function renderTable(tableType) {
+            const tbody = document.querySelector(
+                tableType === 'summary' ? 
+                '.summary-table tbody' : 
+                'table:not(.summary-table) tbody'
+            );
+            
+            tbody.innerHTML = '';
+            appState.filtered[tableType].forEach(row => {
+                tbody.appendChild(row.cloneNode(true));
+            });
+        }
+
+        function updateSortButton(tableType, field, asc) {
+            const button = document.querySelector(
+                `button[onclick*="${tableType}"][onclick*="${field}"]`
+            );
+            if (button) {
+                button.innerHTML = `${asc ? '▲' : '▼'} ${button.textContent.replace(/[▼▲]/g, '')}`;
+            }
+        }
+
+        function exportCSV(type) {
+            const rows = appState.filtered[type];
+            if (rows.length === 0) {
+                alert('没有可导出的数据');
+                return;
+            }
+
+            const csvContent = [];
+            // 添加标题行
+            const headers = type === 'summary' 
+                ? ['UID', '用户名', '总礼物数', '总钻石数', '总打赏金额']
+                : ['UID', '用户名', '礼物名称', '数量', '时间', '钻石数', '打赏金额'];
+            csvContent.push(headers.join(','));
+
+            // 添加数据行
+            rows.forEach(row => {
+                const cells = Array.from(row.cells).map(cell => {
+                    let text = cell.textContent.trim();
+                    if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+                        text = `"${text.replace(/"/g, '""')}"`;
+                    }
+                    return text;
+                });
+                csvContent.push(cells.join(','));
+            });
+
+            // 创建Blob并下载
+            const blob = new Blob(["\uFEFF" + csvContent.join('\n')], {
+                type: 'text/csv;charset=utf-8'
+            });
+            const filename = `${type === 'summary' ? '汇总数据' : '明细数据'}-${new Date().toISOString().slice(0,10)}.csv`;
+
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
         }
     </script>
 </body>
