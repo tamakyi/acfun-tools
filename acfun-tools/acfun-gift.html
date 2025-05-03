@@ -324,40 +324,50 @@
             }
         }
 
+        function calculateValue(record) {
+            const diamondAmount = record.azuanAmount || record.acoin;
+            const isPeach = record.giftName === '桃子';
+            return isPeach ? diamondAmount / 1000 : (diamondAmount / 1000) / 0.8;
+        }
+
         function initOriginalData(data) {
             const userStats = {};
             data.forEach(record => {
                 const uid = record.userId;
                 const diamondAmount = record.azuanAmount || record.acoin;
+                const giftValue = calculateValue(record); 
                 
                 if (!userStats[uid]) {
                     userStats[uid] = {
                         name: record.userName || '匿名用户',
                         totalGifts: 0,
-                        totalAzuan: 0
+                        totalAzuan: 0,
+                        totalValue: 0
                     };
                 }
                 userStats[uid].totalGifts += record.giftCount;
                 userStats[uid].totalAzuan += diamondAmount;
+                userStats[uid].totalValue += giftValue;
             });
 
             appState.original.summary = Object.entries(userStats).map(([uid, stat]) => {
                 const row = document.createElement('tr');
-                row.dataset.totalValue = stat.totalAzuan / 1000;
+                row.dataset.totalValue = stat.totalValue;
                 row.innerHTML = `
                     <td>${uid}</td>
                     <td>${stat.name}</td>
                     <td>${stat.totalGifts.toLocaleString()}</td>
                     <td>${stat.totalAzuan.toLocaleString()}</td>
-                    <td>${(stat.totalAzuan / 1000).toFixed(2)}</td>
+                    <td>${stat.totalValue.toFixed(2)}</td>
                 `;
                 return row;
             });
 
             appState.original.detail = data.map(record => {
                 const row = document.createElement('tr');
+                const giftValue = calculateValue(record);
                 const diamondAmount = record.azuanAmount || record.acoin;
-                row.dataset.singleValue = diamondAmount / 1000;
+                row.dataset.singleValue = giftValue;
                 row.innerHTML = `
                     <td>${record.userId}</td>
                     <td>${record.userName || '匿名用户'}</td>
@@ -365,7 +375,7 @@
                     <td>${record.giftCount}</td>
                     <td>${new Date(record.createTime).toLocaleString('zh-CN')}</td>
                     <td>${diamondAmount.toLocaleString()}</td>
-                    <td>${(diamondAmount / 1000).toFixed(2)}</td>
+                    <td>${giftValue.toFixed(2)}</td>
                 `;
                 return row;
             });
