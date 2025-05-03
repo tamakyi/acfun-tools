@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>ACFun礼物数据分析工具</title>
+    <link rel="shortcut icon" href="favicon.ico">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            position: relative;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding-bottom: 60px;
+        }
+        #inputArea {
+            width: 98%;
+            height: 200px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+        .control-group {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .api-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        #receiveBtn {
+            background: #00c853;
+            color: white;
+        }
+        #sendBtn {
+            background: #2979ff;
+            color: white;
+        }
+        #processBtn {
+            background: #ff9100;
+            color: white;
+        }
+        .api-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .api-btn:disabled {
+            background: #bdbdbd !important;
+            cursor: not-allowed;
+        }
+        .time-filter {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        input[type="datetime-local"] {
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            text-align: left;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .error {
+            color: #d32f2f;
+            padding: 10px;
+            margin: 10px 0;
+            background: #ffebee;
+            border-radius: 4px;
+        }
+        .loading::after {
+            content: "···";
+            animation: loading 1s infinite;
+        }
+        table.summary-table {
+            margin-top: 20px;
+            border-top: 2px solid #eee;
+        }
+        caption {
+            padding: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            text-align: left;
+            background: #f8f9fa;
+            border-bottom: 2px solid #eee;
+        }
+        .detail-caption {
+            margin: 30px 0 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #666;
+            padding: 8px 0;
+            border-bottom: 2px solid #eee;
+        }
+        .data-source-note {
+            color: #666;
+            font-size: 0.9em;
+            margin: 15px 0;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #2979ff;
+        }
+        .copyright {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #666;
+            font-size: 0.9em;
+            text-align: center;
+            width: 100%;
+        }
+        @keyframes loading {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>AcFun礼物数据分析工具</h2>
+        
+        <div class="control-group">
+            <button id="receiveBtn" class="api-btn" onclick="fetchData('received')">
+                获取收到的礼物（因CORS无法使用）
+            </button>
+            <button id="sendBtn" class="api-btn" onclick="fetchData('sent')">
+                获取打赏的礼物（因CORS无法使用）
+            </button>
+        </div>
+
+        <div class="data-source-note">
+            📢 数据获取方式：复制对应API的输出结果，详情见<a href="https://blog.tama.guru/record/acfun-gift-count.html">关于AcFun礼物统计网页的说明</a>
+        </div>
+
+        <textarea id="inputArea" placeholder="在这里粘贴输出的内容..."></textarea>
+        
+        <div class="time-filter">
+            <div>
+                <label>统计开始时间：</label>
+                <input type="datetime-local" id="startTime">
+            </div>
+            <div>
+                <label>统计结束时间：</label>
+                <input type="datetime-local" id="endTime">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <button id="processBtn" class="api-btn" onclick="processJSON()">
+                获取结果
+            </button>
+        </div>
+
+        <div id="errorMessage" class="error"></div>
+        <div id="resultContainer"></div>
+        <script defer src="https://mami.tama.guru/tamami.js" data-website-id="988be4d2-51d6-41b4-99e5-df3c5377bcd4"></script>
+        <div class="copyright">
+            © 2025 tamakyi | make with ❤
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINTS = {
+            received: 'https://m.acfun.cn/rest/apph5-direct/pay/reward/receiveRecords',
+            sent: 'https://m.acfun.cn/rest/apph5-direct/pay/reward/giveRecords'
+        };
+
+        async function fetchData(type) {
+            const btn = document.getElementById(type === 'received' ? 'receiveBtn' : 'sendBtn');
+            const originalText = btn.textContent;
+            
+            try {
+                btn.disabled = true;
+                btn.textContent = '加载中';
+                btn.classList.add('loading');
+
+                const response = await fetch(API_ENDPOINTS[type], {
+                    headers: {
+                      'Referer': 'https://m.acfun.cn',
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    },
+                    origin: true
+                  });
+                if (response.status === 401) throw new Error('401，因为网页获取不到AcFun的cookie，目前无解');
+                if (!response.ok) throw new Error(`请求失败: ${response.status}`);
+                
+                const data = await response.json();
+                if (!data?.records || !Array.isArray(data.records)) {
+                    throw new Error('数据格式错误：缺少有效记录');
+                }
+
+                document.getElementById('inputArea').value = JSON.stringify(data, null, 2);
+                document.getElementById('errorMessage').textContent = '';
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = `错误: ${error.message}`;
+                document.getElementById('inputArea').value = '';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+                btn.classList.remove('loading');
+            }
+        }
+
+        function processJSON() {
+            const input = document.getElementById('inputArea').value;
+            const errorDiv = document.getElementById('errorMessage');
+            const resultContainer = document.getElementById('resultContainer');
+            
+            errorDiv.textContent = '';
+            resultContainer.innerHTML = '';
+
+            try {
+                if (!input.trim()) throw new Error('请输入或加载JSON数据');
+                
+                const data = JSON.parse(input);
+                if (!data?.records || !Array.isArray(data.records)) {
+                    throw new Error('无效的JSON结构：缺少records数组');
+                }
+
+                const start = document.getElementById('startTime').value;
+                const end = document.getElementById('endTime').value;
+                let startTime = start ? new Date(start).getTime() : null;
+                let endTime = end ? new Date(end).getTime() : null;
+
+                if (startTime && endTime && startTime > endTime) {
+                    [startTime, endTime] = [endTime, startTime];
+                }
+
+                const filtered = data.records.filter(record => {
+                    const ts = record.createTime;
+                    return (!startTime || ts >= startTime) && (!endTime || ts <= endTime);
+                });
+
+                if (filtered.length === 0) {
+                    resultContainer.innerHTML = '<div class="no-data">没有找到匹配的记录</div>';
+                    return;
+                }
+
+                // 汇总表格
+                const summaryTable = document.createElement('table');
+                summaryTable.className = 'summary-table';
+                summaryTable.innerHTML = `
+                    <caption>用户汇总统计</caption>
+                    <tr>
+                        <th>UID</th>
+                        <th>用户名</th>
+                        <th>总礼物数</th>
+                        <th>总钻石数</th>
+                        <th>打赏金额（元）</th>
+                    </tr>
+                `;
+
+                const userStats = {};
+                filtered.forEach(record => {
+                    const uid = record.userId;
+                    const diamondAmount = record.azuanAmount || record.acoin;
+                    
+                    if (!userStats[uid]) {
+                        userStats[uid] = {
+                            name: record.userName || '匿名用户',
+                            totalGifts: 0,
+                            totalAzuan: 0
+                        };
+                    }
+                    userStats[uid].totalGifts += record.giftCount;
+                    userStats[uid].totalAzuan += diamondAmount;
+                });
+
+                Object.entries(userStats).forEach(([uid, stat]) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${uid}</td>
+                        <td>${stat.name}</td>
+                        <td>${stat.totalGifts.toLocaleString()}</td>
+                        <td>${stat.totalAzuan.toLocaleString()}</td>
+                        <td>${(stat.totalAzuan / 0.8 / 1000).toFixed(2)}</td>
+                    `;
+                    summaryTable.appendChild(row);
+                });
+
+                resultContainer.appendChild(summaryTable);
+
+                // 明细表格
+                const detailTitle = document.createElement('div');
+                detailTitle.className = 'detail-caption';
+                detailTitle.textContent = '明细数据';
+                resultContainer.appendChild(detailTitle);
+
+                const detailTable = document.createElement('table');
+                detailTable.innerHTML = `
+                    <tr>
+                        <th>UID</th>
+                        <th>用户名</th>
+                        <th>礼物名称</th>
+                        <th>数量</th>
+                        <th>时间</th>
+                        <th>钻石数</th>
+                        <th>打赏金额（元）</th>
+                    </tr>
+                `;
+
+                filtered.forEach(record => {
+                    const date = new Date(record.createTime);
+                    const diamondAmount = record.azuanAmount || record.acoin;
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${record.userId}</td>
+                        <td>${record.userName || '匿名用户'}</td>
+                        <td>${record.giftName}</td>
+                        <td>${record.giftCount}</td>
+                        <td>${date.toLocaleString('zh-CN')}</td>
+                        <td>${diamondAmount.toLocaleString()}</td>
+                        <td>${(diamondAmount / 0.8 / 1000).toFixed(2)}</td>
+                    `;
+                    detailTable.appendChild(row);
+                });
+
+                resultContainer.appendChild(detailTable);
+
+            } catch (error) {
+                errorDiv.textContent = `处理失败: ${error.message}`;
+                console.error('处理错误:', error);
+            }
+        }
+    </script>
+</body>
+</html>
